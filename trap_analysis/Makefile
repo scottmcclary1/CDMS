@@ -10,7 +10,7 @@
 #-------------------------------------------------------------------------------
 # Intel Fortran 95 compiler
  F95    = ifort
- OMPF95 = ifort -openmp
+ OMPF95 = ifort -qopenmp
 
 #-------------------------------------------------------------------------------
 # Flags other than for optimization.
