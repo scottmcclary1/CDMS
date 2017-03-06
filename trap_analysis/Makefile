@@ -9,8 +9,8 @@
 # 
 #-------------------------------------------------------------------------------
 # Intel Fortran 95 compiler
- F95    = ifort
- OMPF95 = ifort -qopenmp
+ F95    = /home/cc/intel/compilers_and_libraries_2017.2.174/linux/bin/intel64/ifort
+ OMPF95 = /home/cc/intel/compilers_and_libraries_2017.2.174/linux/bin/intel64/ifort -qopenmp
 
 #-------------------------------------------------------------------------------
 # Flags other than for optimization.
