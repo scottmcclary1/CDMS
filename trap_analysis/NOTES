@@ -1,0 +1,196 @@
+Mapping Windows OS Fortran compiler options to Linux
+=====================================================================
+Page numbers are from "Intel Fortran Compiler User and Reference Guides",
+Document number 304970-005US.  All the following is already implemented
+in the Makefile. This is just for information.
+
+
+Compiler
+------------------------
+    Windows OS                         Linux               page in Fortran U.G.
+
+   /nologo                          -nologo                    297
+   /Zi                              -g                         229, 742
+   /Od                              -O0                        334
+   /gen-interfaces                  -gen-interfaces            237
+   /Qopenmp                         -openmp                    346
+   /debug-parameters:all            -debug-parameters all      115, 706
+   /warn:declarations               -warn declarations         674, 702
+   /warn:interfaces                 -warn interfaces           674
+   /module:"Debug\\"                -module Debug              315, 715, 771   path to modules
+   /object:"Debug\\"                -o Debug -c                342, 716        name of object file
+   /traceback                       -traceback                 655
+   /check:bounds                    -check bounds              92
+   /check:uninit                    -check uninit              92
+   /libs:static                     [no equivalent]            293             link to static libraries
+   /threads                         -threads                   652, 309        looks like a linker option
+   /dbglibs                         [no equivalent]            107, 309        looks like a linker option
+   /c                               -c                         90
+
+
+Linker
+------------------------
+   /OUT:"Debug\Sep_15_2014.exe"    -o Debug/Sep_15_2014        798
+   /INCREMENTAL:NO                 (no linux equivalent)
+   /NOLOGO                         -nologo                     297
+   /LIBPATH:"C:\Program Files\Intel\MKL\9.1\ia32\lib"
+   /MANIFEST
+   /MANIFESTFILE:"C:\Users\David\AppData\Local\Temp\Temp1_M Jarrold group
+         analysis code.zip\M Jarrold group analysis code\trap_analysis\
+         debug\sep_15_2014.exe.intermediate.manifest"
+   /DEBUG
+   /PDB:"C:\Users\David\AppData\Local\Temp\Temp1_M Jarrold group analysis
+         code.zip \M Jarrold group analysis code\trap_analysis\debug\sep_15_2014.pdb"
+   /SUBSYSTEM:CONSOLE
+   /STACK:100000000,100000000
+   /LARGEADDRESSAWARE mkl_c.lib
+   libguide.lib
+
+
+Notes About Compiling on Quarry
+=====================================================================
+1. The main program is in Trap_Analysis.f90
+
+2. I got the source files compiled, with some warnings about unsafe format descrip-
+   tors, which I ignored. To link, I included -mkl in the link command. It came back
+   with several unresolved global names which appeared to all be in the MKL FFT lib.
+   To resolve them, I had to copy the mkl_dfti.f90 module from,
+
+       /N/soft/rhel6/intel/13.1/composer_xe_2013.1.117/mkl/include
+
+   This is (probably) MKL 11.1 Update 4. Dave and Ben were using an older release
+   which apparently had different function names, and possibly different function-
+   ality.
+
+3. When I ran Ben's example, it seg faulted after getting all my input from stdin.
+
+
+
+Notes on my changes to the code
+==========================================
+I copied Trap_Analysis.f90 to Trap_Analysis_01.f90 to have a working copy of that file.
+I left the original alone. Until late January I used the Intel 13.0.1 compiler on Quarry.
+Since Quarry was going to be decommissioned on January 30, I switched over to Karst, and
+used its Intel 13.0.1.
+
+The serial variant compiles and runs fine on both Quarry and Karst when using the Intel
+13.0.1 compiler. However, the OpenMP variant always seg faults.  The following notes
+detail the changes I made to Trap_Analysis_01.f90 to try to get the OpenMP variant to
+run. Line numbers refer to original source code (Trap_Analysis.f90). To see exact changes,
+do the diff command,
+
+   diff Trap_Analysis.f90 Trap_Analysis_01.F90
+   
+
+1.  Line 549 - Deleted NUM_THREADS clause from OpenMP parallel construct.
+             - Deleted COPYIN clause from OpenMP parallel construct.
+2.  Line 593 - Changed "BINARY"  to "UNFORMATTED" in OPEN statement. That didn't work,
+    so I changed it back.
+3.  Line 614 - Added an OpenMP CRITICAL section around lines 581-616 to prevent a problem
+    with non-thread-safe OPEN and READ statements, and race condition in updating
+    files_analyzed.
+4.  Line 791 - Added an OpenMP CRITICAL section aroud the CLOSE statement to prevent a
+    potential non-thread-safe problem.
+
+I could not find any other problems, but the OpenMP variant of the code still seg-faults.
+I thought this might be due to large private local arrays in subroutines being allocated
+on the stack. Subroutines called from within an OpenMP parallel do loop have private
+stack for each thread. Since stack space is relatively small, this can quickly exhaust
+it. To get around this problem, I copied Trap_Analysis_01.F90 to Trap_Analysis_03.F90,
+and changed all statically declared local arrays to allocatable arrays. Since allocatable
+arrays go on the heap, pressure on the stack will be relieved. After doing this for
+enough arrays, and increasing the stacksize, I finally got the OpenMP code to run. To
+increase the stack size, I did the following:
+
+    ulimit -S -s 120000
+    export OMP_STACKSIZE=100M
+
+The units in the ulimit command are KB, that for OMP_STACKSIZE are MB. Smaller numbers
+may work.
+
+I made other changes to subroutines in Trap_Analysis_03.F90, primarily changing all
+references to the constant 1048576 to a parameter that I put in module Trap_Mod.F90.
+That way, if it is ever desired to change the size of the FFT arrays, one needs to
+change only that parameter rather than every occurrence of 104856, 524288, and similar
+explicit constants in the code.
+
+
+How to build thecode
+================================================================================
+The command to make the serial variant of Trap_Analysis_01.F90 is,
+
+    make trap01
+
+The command to make the OpenMP variant is,
+
+    make trap01_omp
+
+Note that you must do a "make clean" between builds, to clear out all the .mod files
+in the "work" directory, and to avoid mixing serial and OpenMP versions of the .o
+files. The serial and OpenMP variants of Trap_Analysis_03.F90 are built the same way:
+
+    make trap03
+    make trap03_omp
+
+
+How to run the example
+================================================================================
+Here is an example of information the program requests, and user responses:
+
+ Press 1 for Channel A...
+ Press 2 for Channel B (NOT SUPPORTED)...
+ Press 3 to add a test signal onto a noise file and analyze...
+ Press 4 for simulated data options...
+ Press 5 to perform FFT on selected file and section...
+ Press 6 to output freq data for all files...
+ Press 7 to scan all files for frequency shift > 20 Hz...
+ Press 8 to output freq data for selected mass range and time trapped...
+ Press 9 for trap calibration options...
+ Press 10 for noise analysis...
+ Press 11 for voltage calibration...
+ Press 12 to add a test signal onto multiple noise files and analyze...
+           1
+ How long is one period (in ms)?
+          95
+ How long is maximum trapping time (in ms)?
+          94
+ Enter run number...
+          39
+ Enter last file number...
+       10005
+
+
+
+
+Other notes
+==================================================================================
+1.  Converted data-swapping DO loop to a more efficient algorithm, using ytmp variable
+    rather than the MOD function.
+2.  Changed where input array is zeroed out.
+3.  Until 2015-02-08 22:40 I used Intel 13.0.1 to compile Trap_Analysis_01.f90.
+    I first used this compiler on Quarry from November through most of January, then
+    moved to Karst in late January. The OpenMP variant exhibited similar behavior on both
+    machines, crashing with a seg fault. However, it crashed in different places.  On
+    Quarry, it crashed right at the OpenMP parallel region directive. On Karst it crashed
+    when returning from fft_filter (around lin 784). On Feb 08, I tried the other Intel
+    compilers on Karst, 13.1.2, 14.0.2 and 15.0.1. The OpenMP code seg-faulted in the
+    same place with each compiler, when returning from fft_filter.
+4.  I examined the Status after each call to a Dfti function in fft_filter. All returned
+    "Intel MKL DFTI SUCCESS: No error". But the seg fault happens when returning to the
+    main program.
+5.  Tried setting
+       ulimit -S -s 960000
+       export OMP_STACKSIZE=200M
+    and using OMP_NUM_THREADS=2. Perhaps the ulimit stack size must cover the needs of
+    both threads. The OMP_STACKSIZE number is per thread. However, the seg fault still
+    occurred.
+6.  Web search for OpenMP stacksize problems revealed advice to use "-heap-arrays:<n>"
+    to put all automatic arrays greater than n KB on the heap rather than the stack.
+    I tried n=20, 10 and 2. None resulted in any  improvement; still got seg-fault.
+    Other info indicates this does not apply to OpenMP codes.
+7.  Further web search found a PDF presentation on the stack overflow problem. Sug-
+    gestions were to include
+        -Wl,-stack_size,0x10000000,-stack_addr,0xc0000000
+    on the link command, or
+        -save
+    on the compile command. Tried -save, with no luck.
